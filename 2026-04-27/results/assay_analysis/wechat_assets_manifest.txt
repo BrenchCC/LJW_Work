@@ -1,0 +1,8 @@
+figure_3_qualitative.png	images/figure_3_qualitative.png
+figure_4_resolution.png	images/figure_4_resolution.png
+figure_5_backbone.png	images/figure_5_backbone.png
+header.png	images/header.png
+table_1_main_comparison.png	images/table_1_main_comparison.png
+table_4_pca_variance.png	images/table_4_pca_variance.png
+technical_framework.png	images/technical_framework.png
+technical_pca_scoring.png	images/technical_pca_scoring.png

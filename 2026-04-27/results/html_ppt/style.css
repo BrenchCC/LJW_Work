@@ -1,0 +1,529 @@
+/* SubspaceAD mentor report deck. Scoped to avoid changing shared assets. */
+
+.tpl-subspacead-report,
+.tpl-subspacead-report * {
+  letter-spacing: 0;
+}
+
+.tpl-subspacead-report .slide {
+  padding: 64px 80px 58px;
+  justify-content: flex-start;
+  gap: 22px;
+}
+
+.tpl-subspacead-report .kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--accent-2);
+  text-transform: uppercase;
+}
+
+.tpl-subspacead-report .h1 {
+  margin: 12px 0 18px;
+  max-width: 760px;
+  font-size: 66px;
+  line-height: 1.12;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.tpl-subspacead-report .h2 {
+  margin: 8px 0 8px;
+  font-size: 44px;
+  line-height: 1.18;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.tpl-subspacead-report .lede {
+  max-width: 700px;
+  font-size: 22px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.tpl-subspacead-report .slide-grid {
+  display: grid;
+  gap: 28px;
+  width: 100%;
+  min-height: 0;
+}
+
+.tpl-subspacead-report .hero-grid {
+  grid-template-columns: 0.92fr 1.08fr;
+  align-items: center;
+  height: 100%;
+}
+
+.tpl-subspacead-report .two-col {
+  grid-template-columns: 0.95fr 1.05fr;
+  align-items: stretch;
+}
+
+.tpl-subspacead-report .image-left {
+  grid-template-columns: 1.18fr 0.82fr;
+  align-items: stretch;
+}
+
+.tpl-subspacead-report .results-grid {
+  grid-template-columns: 0.42fr 0.58fr;
+  align-items: stretch;
+}
+
+.tpl-subspacead-report .media-panel {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.tpl-subspacead-report .media-panel img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tpl-subspacead-report .hero-media {
+  height: 360px;
+  padding: 22px;
+}
+
+.tpl-subspacead-report .two-col .media-panel {
+  min-height: 430px;
+}
+
+.tpl-subspacead-report .image-left .media-panel {
+  min-height: 450px;
+  padding: 18px;
+}
+
+.tpl-subspacead-report .tall-media {
+  max-height: 500px;
+  padding: 16px;
+}
+
+.tpl-subspacead-report figcaption {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tpl-subspacead-report .meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.tpl-subspacead-report .meta-strip span {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.tpl-subspacead-report .point-row {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tpl-subspacead-report .point-row:first-child {
+  padding-top: 6px;
+}
+
+.tpl-subspacead-report .point-row h3 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.tpl-subspacead-report .point-row p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.tpl-subspacead-report .point-index {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+.tpl-subspacead-report .pipeline {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr 44px 1fr;
+  align-items: stretch;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.tpl-subspacead-report .pipe-node {
+  min-height: 250px;
+  padding: 26px 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tpl-subspacead-report .pipe-node.emphasis {
+  border-color: var(--border-strong);
+  background: var(--grad-soft);
+}
+
+.tpl-subspacead-report .node-label {
+  display: block;
+  margin-bottom: 18px;
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tpl-subspacead-report .pipe-node strong {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 25px;
+  line-height: 1.25;
+}
+
+.tpl-subspacead-report .pipe-node p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1.62;
+}
+
+.tpl-subspacead-report .pipe-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 32px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+.tpl-subspacead-report .insight-band,
+.tpl-subspacead-report .decision-box {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 18px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 18px 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.tpl-subspacead-report .insight-band strong,
+.tpl-subspacead-report .decision-box strong {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.tpl-subspacead-report .insight-band span,
+.tpl-subspacead-report .decision-box span {
+  color: var(--text-1);
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.tpl-subspacead-report .formula-stack {
+  display: grid;
+  gap: 16px;
+  align-content: center;
+}
+
+.tpl-subspacead-report .formula-card {
+  padding: 22px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tpl-subspacead-report .formula-card span {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tpl-subspacead-report .formula-card code {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.tpl-subspacead-report .accent-card {
+  border-color: var(--border-strong);
+  background: var(--grad-soft);
+}
+
+.tpl-subspacead-report .subspace-diagram {
+  position: relative;
+  height: 300px;
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.tpl-subspacead-report .plane {
+  position: absolute;
+  left: 72px;
+  top: 126px;
+  width: 390px;
+  height: 92px;
+  transform: skewX(-24deg) rotate(-9deg);
+  border: 2px solid var(--border-strong);
+  background: var(--grad-soft);
+}
+
+.tpl-subspacead-report .normal-point,
+.tpl-subspacead-report .anom-point {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tpl-subspacead-report .p1 {
+  left: 178px;
+  top: 160px;
+}
+
+.tpl-subspacead-report .p2 {
+  left: 278px;
+  top: 142px;
+}
+
+.tpl-subspacead-report .p3 {
+  left: 362px;
+  top: 174px;
+}
+
+.tpl-subspacead-report .anom-point {
+  left: 390px;
+  top: 66px;
+  background: var(--bad);
+}
+
+.tpl-subspacead-report .residual-line {
+  position: absolute;
+  left: 397px;
+  top: 82px;
+  width: 2px;
+  height: 88px;
+  background: var(--bad);
+  transform: rotate(16deg);
+  transform-origin: top center;
+}
+
+.tpl-subspacead-report .caption-block {
+  margin-top: 18px;
+  padding: 18px 20px;
+  border-left: 4px solid var(--accent);
+  background: var(--surface-2);
+}
+
+.tpl-subspacead-report .caption-block strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 20px;
+}
+
+.tpl-subspacead-report .caption-block p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.tpl-subspacead-report .metric-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.tpl-subspacead-report .metric {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.tpl-subspacead-report .value {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 36px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.tpl-subspacead-report .label {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.38;
+}
+
+.tpl-subspacead-report .ablation-layout {
+  display: grid;
+  grid-template-rows: 0.95fr 1fr;
+  gap: 16px;
+  min-height: 0;
+}
+
+.tpl-subspacead-report .wide-media {
+  height: 330px;
+  padding: 12px;
+}
+
+.tpl-subspacead-report .mini-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.tpl-subspacead-report .mini-figure {
+  margin: 0;
+  min-height: 300px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tpl-subspacead-report .mini-figure img {
+  width: 100%;
+  height: 235px;
+  object-fit: contain;
+  padding: 10px;
+}
+
+.tpl-subspacead-report .mini-figure figcaption {
+  min-height: 64px;
+}
+
+.tpl-subspacead-report .roadmap {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-top: 26px;
+}
+
+.tpl-subspacead-report .step {
+  min-height: 280px;
+  padding: 18px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tpl-subspacead-report .step span {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-weight: 850;
+}
+
+.tpl-subspacead-report .step strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 20px;
+}
+
+.tpl-subspacead-report .step p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.tpl-subspacead-report .deck-footer {
+  left: 80px;
+  right: 80px;
+  bottom: 24px;
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .tpl-subspacead-report .slide {
+    padding: 40px 28px 48px;
+    overflow: auto;
+  }
+
+  .tpl-subspacead-report .h1 {
+    font-size: 44px;
+  }
+
+  .tpl-subspacead-report .h2 {
+    font-size: 34px;
+  }
+
+  .tpl-subspacead-report .hero-grid,
+  .tpl-subspacead-report .two-col,
+  .tpl-subspacead-report .image-left,
+  .tpl-subspacead-report .results-grid,
+  .tpl-subspacead-report .pipeline,
+  .tpl-subspacead-report .roadmap,
+  .tpl-subspacead-report .mini-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .tpl-subspacead-report .pipe-arrow {
+    display: none;
+  }
+
+  .tpl-subspacead-report .insight-band,
+  .tpl-subspacead-report .decision-box {
+    grid-template-columns: 1fr;
+  }
+
+  .tpl-subspacead-report .deck-footer {
+    left: 28px;
+    right: 28px;
+  }
+}

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-themes="corporate-clean,academic-paper,minimal-white,swiss-grid,engineering-whiteprint">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SubspaceAD 论文汇报：从正常子空间到特征投影</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" id="theme-link" href="assets/themes/corporate-clean.css">
+<link rel="stylesheet" href="assets/animations/animations.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-subspacead-report">
+<div class="deck">
+
+  <section class="slide cover-slide" data-title="Cover">
+    <div class="slide-grid hero-grid">
+      <div class="hero-copy">
+        <p class="kicker">mentor paper report · 2026-04-27</p>
+        <h1 class="h1" data-anim="fade-up">SubspaceAD：<br>从正常子空间到特征投影</h1>
+        <p class="lede">用 DINOv2 patch 特征和 PCA 正常子空间，把异常检测简化为“投影后看残差”。</p>
+        <div class="meta-strip">
+          <span>少样本异常检测</span>
+          <span>免训练</span>
+          <span>服务特征子空间投影任务</span>
+        </div>
+      </div>
+      <figure class="media-panel hero-media">
+        <img src="../assay_analysis/images/header.png" alt="SubspaceAD paper title and authors">
+      </figure>
+    </div>
+    <div class="deck-footer">
+      <span>SubspaceAD · Lendering et al. · arXiv:2602.23013</span>
+      <span class="slide-number" data-current="1" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>这一页先把报告目标说清楚：我不是只复述一篇异常检测论文，而是想看它对我们正在做的<strong>特征子空间投影任务</strong>有什么直接启发。</p>
+      <p>SubspaceAD 的核心非常克制：用冻结的 DINOv2 抽 patch 特征，只拿少量正常图像拟合 PCA 子空间，测试时看每个 patch 投影回正常子空间后的残差。残差大，就认为这个位置偏离正常变化。</p>
+      <p>所以这篇文章最值得关注的地方，是它把“缺陷判断”从图像像素空间搬到了<strong>可迁移特征空间</strong>，再用一个很轻的投影模型做判别。这一点和我们的任务方向高度相关。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Why This Paper">
+    <p class="kicker">01 · why it matters</p>
+    <h2 class="h2">为什么这篇论文值得看</h2>
+    <div class="slide-grid two-col">
+      <div class="stack">
+        <div class="point-row">
+          <span class="point-index">A</span>
+          <div>
+            <h3>工业少样本场景贴近真实约束</h3>
+            <p>正常样本更容易获得，异常类型稀疏、细微，而且难以用文本提示稳定描述。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">B</span>
+          <div>
+            <h3>方法避开复杂训练管线</h3>
+            <p>没有 memory bank、prompt tuning 或辅助数据，只保存均值向量和 PCA 主方向。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">C</span>
+          <div>
+            <h3>给子空间投影任务一个强 baseline</h3>
+            <p>先把判别转到特征空间，再用投影距离和残差解释异常。</p>
+          </div>
+        </div>
+      </div>
+      <figure class="media-panel">
+        <img src="../background_pages/page-01.png" alt="Background task first page">
+        <figcaption>背景任务来自第六款电池零样本缺陷检测；PDF 为图片型，这里保留原页作为任务来源。</figcaption>
+      </figure>
+    </div>
+    <div class="deck-footer">
+      <span>Task bridge: product-domain shift · feature-space projection</span>
+      <span class="slide-number" data-current="2" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>这里先说明为什么我选这篇文章。我们的背景任务是新产品上线后，缺陷样本和标签都很少，直接复用旧型号标签会遇到 domain shift。也就是说，缺陷的物理形态可能类似，但材质、光照、背景、纹理会让图像域发生变化。</p>
+      <p>SubspaceAD 的价值在于，它没有假设我们能训练一个复杂模型，也没有假设异常样本足够多。它只问一个问题：如果基础视觉模型的 patch 特征足够好，能不能用正常样本的子空间来解释“什么是正常变化”。</p>
+      <p>这个思路对我们有用，因为它提供了一个很强的起点：先抽高维特征，再在子空间中做投影、距离、残差，而不是直接在原图上做判别。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Background Task">
+    <p class="kicker">02 · target problem</p>
+    <h2 class="h2">背景任务：零样本缺陷检测的子空间假设</h2>
+    <div class="pipeline">
+      <div class="pipe-node">
+        <span class="node-label">旧型号</span>
+        <strong>有缺陷样本与标签</strong>
+        <p>划痕、正常、其他缺陷类别提供监督信号。</p>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node emphasis">
+        <span class="node-label">共享空间</span>
+        <strong>学习可迁移缺陷子空间</strong>
+        <p>同类缺陷聚拢，外观域差异被弱化。</p>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node">
+        <span class="node-label">新型号</span>
+        <strong>无标签图像直接投影</strong>
+        <p>用距离度量或轻量分类器输出缺陷概率。</p>
+      </div>
+    </div>
+    <div class="insight-band">
+      <strong>关键假设</strong>
+      <span>划痕的底层物理特征可迁移；产品外观域变化需要被剥离或弱化。</span>
+    </div>
+    <div class="deck-footer">
+      <span>Our task: shared defect subspace under product-domain shift</span>
+      <span class="slide-number" data-current="3" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>把背景任务抽象一下，其实是一个跨产品域的特征投影问题。旧型号电池上有缺陷样本和标签，新型号只有产线图像，目标是尽量不重新标注，就能判断划痕和正常。</p>
+      <p>这里的核心假设是：划痕这种缺陷有某些底层物理特征是可以迁移的，比如局部纹理破坏、边缘不连续、细长结构；但是不同电池型号的表面材质、背景和光照会改变成像域。</p>
+      <p>所以子空间方法要做两件事：第一，用预训练 ResNet 或 ViT 抽取比像素更稳定的高维特征；第二，在一个共享子空间里让同类缺陷聚拢，让外观域差异尽量不要主导判别。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Method">
+    <p class="kicker">03 · method</p>
+    <h2 class="h2">SubspaceAD：正常子空间 + 残差评分</h2>
+    <div class="slide-grid image-left">
+      <figure class="media-panel">
+        <img src="../assay_analysis/images/technical_framework.png" alt="SubspaceAD technical framework">
+      </figure>
+      <div class="formula-stack">
+        <div class="formula-card">
+          <span>Feature</span>
+          <code>x_p = mean(f_l(p)), l = 22...28</code>
+        </div>
+        <div class="formula-card">
+          <span>Projection</span>
+          <code>x_proj = mu + C C^T (x - mu)</code>
+        </div>
+        <div class="formula-card accent-card">
+          <span>Score</span>
+          <code>S(x) = ||x - x_proj||_2^2</code>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Frozen DINOv2-G · PCA on normal patches · residual anomaly map</span>
+      <span class="slide-number" data-current="4" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>这页是论文方法的最小闭环。训练阶段只有 k 张正常图像，k 可以是 1、2 或 4。作者用冻结的 DINOv2-G 抽 patch token，而且不是只用最后一层，而是聚合第 22 到 28 层的中间特征。</p>
+      <p>拿到正常 patch 特征后，方法对这些点拟合 PCA，保存均值 <strong>mu</strong> 和主方向矩阵 <strong>C</strong>。测试图像走同一个特征提取器，每个 patch 特征都投影到这个正常子空间上。</p>
+      <p>最后的异常分数就是原特征和投影重构特征之间的欧氏残差平方。直观理解是：正常 patch 能被正常主变化解释，异常 patch 偏离这个子空间，所以在正交方向留下更大残差。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="PCA Scoring">
+    <p class="kicker">04 · core mechanism</p>
+    <h2 class="h2">关键机制：子空间不能“太完整”</h2>
+    <div class="slide-grid two-col">
+      <div>
+        <div class="subspace-diagram" aria-hidden="true">
+          <div class="plane"></div>
+          <div class="normal-point p1"></div>
+          <div class="normal-point p2"></div>
+          <div class="normal-point p3"></div>
+          <div class="anom-point"></div>
+          <div class="residual-line"></div>
+        </div>
+        <div class="caption-block">
+          <strong>解释方差阈值 tau = 0.99</strong>
+          <p>保留主要正常变化，同时保留能暴露异常的残差方向。</p>
+        </div>
+      </div>
+      <figure class="media-panel tall-media">
+        <img src="../assay_analysis/images/technical_pca_scoring.png" alt="PCA subspace scoring equations">
+      </figure>
+    </div>
+    <div class="deck-footer">
+      <span>Failure mode: tau = 1.00 reconstructs anomalies too well</span>
+      <span class="slide-number" data-current="5" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>这页强调一个很重要的点：PCA 子空间不是越大越好。论文用解释方差阈值 tau 来决定保留多少主成分，默认是 0.99。这个设置的意义是，正常样本的主变化被保留下来，但最后一部分低能量方向不要全收进去。</p>
+      <p>如果 tau 设到 1.00，模型几乎保留完整特征空间。这样异常 patch 也可能被重构得很好，残差就变小，异常信号反而消失。论文的 Table 4 里，这一点通过指标下降体现得很明显。</p>
+      <p>这对我们的启发是：做共享缺陷子空间时，也不能只追求“投影后信息保留最多”。真正要优化的是判别性，也就是哪些方向应该聚拢，哪些方向应该被留作残差或排斥信号。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Results">
+    <p class="kicker">05 · evidence</p>
+    <h2 class="h2">实验结论：简单投影能打到强基线</h2>
+    <div class="slide-grid results-grid">
+      <div class="metric-panel">
+        <div class="metric">
+          <span class="value">97.1%</span>
+          <span class="label">MVTec-AD 1-shot I-AUROC</span>
+        </div>
+        <div class="metric">
+          <span class="value">97.5%</span>
+          <span class="label">MVTec-AD 1-shot P-AUROC</span>
+        </div>
+        <div class="metric">
+          <span class="value">93.4%</span>
+          <span class="label">VisA 1-shot I-AUROC</span>
+        </div>
+        <div class="metric">
+          <span class="value">98.2%</span>
+          <span class="label">VisA 1-shot P-AUROC</span>
+        </div>
+      </div>
+      <figure class="media-panel">
+        <img src="../assay_analysis/images/table_1_main_comparison.png" alt="Main comparison table">
+      </figure>
+    </div>
+    <div class="insight-band">
+      <strong>谨慎结论</strong>
+      <span>SubspaceAD 大多数指标领先或持平，但不是每个单项都绝对第一；优势主要来自强基础特征和合适残差空间。</span>
+    </div>
+    <div class="deck-footer">
+      <span>MVTec-AD · VisA · 1/2/4-shot · five random seeds</span>
+      <span class="slide-number" data-current="6" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>主实验结果说明，这个非常简单的投影方法在少样本异常检测里已经能达到很强的水平。1-shot 的 MVTec-AD 上，图像级 AUROC 是 97.1%，像素级 AUROC 是 97.5%。VisA 上，图像级 AUROC 是 93.4%，像素级 AUROC 是 98.2%。</p>
+      <p>和 AnomalyDINO 相比，VisA 1-shot 图像级 AUROC 提升大约 6 个百分点，PRO 也有提升。这个结果支撑了论文最核心的判断：在强视觉基础模型特征上，很多异常检测能力可以由简单统计子空间释放出来。</p>
+      <p>不过汇报时要保守一点。SubspaceAD 不是所有单项都第一，尤其在某些 4-shot 指标上仍有方法更高。所以我会把它定义成强 baseline 和清晰机制，而不是绝对全面碾压。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Ablations">
+    <p class="kicker">06 · ablation</p>
+    <h2 class="h2">关键消融：性能来自“特征质量 × 残差空间”</h2>
+    <div class="ablation-layout">
+      <figure class="media-panel wide-media">
+        <img src="../assay_analysis/images/figure_3_qualitative.png" alt="Qualitative anomaly localization">
+      </figure>
+      <div class="mini-gallery">
+        <figure class="mini-figure">
+          <img src="../assay_analysis/images/figure_4_resolution.png" alt="Resolution ablation">
+          <figcaption>分辨率：448 px 后趋稳，672 px 是稳健折中。</figcaption>
+        </figure>
+        <figure class="mini-figure">
+          <img src="../assay_analysis/images/figure_5_backbone.png" alt="Backbone size ablation">
+          <figcaption>backbone：DINOv2-G 明显抬高上限。</figcaption>
+        </figure>
+        <figure class="mini-figure">
+          <img src="../assay_analysis/images/table_4_pca_variance.png" alt="PCA variance threshold ablation">
+          <figcaption>PCA 阈值：tau = 1.00 会削弱残差判别。</figcaption>
+        </figure>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Qualitative maps · resolution · backbone · explained variance</span>
+      <span class="slide-number" data-current="7" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>这页放三个支撑机制的消融。第一是定性图。SubspaceAD 的热图在多个类别上更接近 GT 区域，背景误激活更少，说明 PCA 残差不是只适合图像级检测，也能形成可用的空间定位图。</p>
+      <p>第二是分辨率。VisA 从 256 提升到 448 和 672 时改善明显，MVTec-AD 在 448 以上比较稳定。说明 patch 级局部细节对缺陷检测有帮助，但不是无限提高分辨率就一直涨。</p>
+      <p>第三是 backbone 和 PCA 阈值。DINOv2-G 比小模型更强，说明特征质量决定上限；tau 等于 1.00 时指标下降，说明残差空间必须存在。合在一起看，这篇论文的经验就是：强特征负责表达，合适的子空间负责把异常暴露出来。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Next Steps">
+    <p class="kicker">07 · for our project</p>
+    <h2 class="h2">下一步：把论文改造成可验证路线</h2>
+    <div class="roadmap">
+      <div class="step">
+        <span>1</span>
+        <strong>抽特征</strong>
+        <p>DINOv2 / ViT 提取旧型号与新型号 patch 或 region 特征。</p>
+      </div>
+      <div class="step">
+        <span>2</span>
+        <strong>建 baseline</strong>
+        <p>并行验证正常 PCA 残差和缺陷原型子空间投影。</p>
+      </div>
+      <div class="step">
+        <span>3</span>
+        <strong>比距离</strong>
+        <p>欧氏、余弦、Mahalanobis，以及轻量 SVM / MLP。</p>
+      </div>
+      <div class="step">
+        <span>4</span>
+        <strong>做对齐</strong>
+        <p>同类缺陷聚拢、背景域排斥、正常区域残差校准。</p>
+      </div>
+      <div class="step">
+        <span>5</span>
+        <strong>看可视化</strong>
+        <p>投影点云、异常热图、阈值敏感性和跨型号泛化。</p>
+      </div>
+    </div>
+    <div class="decision-box">
+      <strong>给 mentor 的问题</strong>
+      <span>本阶段优先验证“正常子空间残差”，还是“共享缺陷子空间投影”？</span>
+    </div>
+    <div class="deck-footer">
+      <span>Proposed deliverable: feature-space baselines before heavier UDA training</span>
+      <span class="slide-number" data-current="8" data-total="8"></span>
+    </div>
+    <aside class="notes">
+      <p>最后把论文落到我们的项目路线。我的建议是先不要直接上复杂 UDA 或大模型微调，而是先做两个很明确的 baseline。第一个是复现 SubspaceAD 思路：用少量正常样本拟合 PCA，看残差能不能在新型号上给出有效划痕热图。</p>
+      <p>第二个是更贴近背景任务的缺陷原型子空间：用旧型号已标注缺陷学习共享缺陷方向，再把新型号样本投影进去，比较距离和轻量分类器的表现。</p>
+      <p>这两个 baseline 做出来后，再决定是否加入域对齐目标。和 mentor 讨论时，我建议重点问一个决策问题：当前阶段是先验证“正常子空间残差”这个低成本方案，还是直接推进“共享缺陷子空间投影”。这个选择会决定后续实验设计和标注需求。</p>
+    </aside>
+  </section>
+
+</div>
+
+<script src="assets/runtime.js"></script>
+</body>
+</html>

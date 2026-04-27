@@ -1,0 +1,86 @@
+---
+title: SubspaceAD 论文汇报：方法解析与业务落地
+---
+
+## 1. [cover] SubspaceAD：Training-Free Few-Shot Anomaly Detection
+副标题：通过正常特征子空间建模，服务工业缺陷检测的特征投影路线
+任务定位：为“新电池零样本缺陷检测 / 特征子空间投影”提炼可验证 baseline 与实验问题。
+核心问题：SubspaceAD 的正常子空间残差，能否转化为业务可用的跨型号缺陷投影方案？
+
+## 2. [content] 业务背景：为什么不能直接复用旧缺陷模型
+旧型号电池已有划痕样本与标签，新型号上线时没有划痕标签。
+缺陷物理本质相似，但材质、光照、反光率、背景和表面纹理会造成 domain shift。
+传统监督微调需要重新采集、标注、训练，周期不适合新产线快速切换。
+目标不是先训练一个复杂模型，而是先验证：在预训练视觉特征中，缺陷/正常是否存在可稳定投影的子空间结构。
+
+## 3. [content] 论文定位：少样本正常图像能否替代复杂训练
+SubspaceAD 面向 few-shot anomaly detection，每个类别只有 k = 1, 2, 4 张正常训练图像。
+方法不训练网络、不做 prompt tuning、不维护 memory bank。
+核心假设：DINOv2 的 patch-level 表征已经足够强，异常判断可以交给一个简单统计模型完成。
+一句话方法：用正常 patch 特征拟合 PCA 子空间，测试 patch 到该子空间的重构残差就是异常分数。
+
+## 4. [content] 方法总览：两阶段闭环
+Stage 1：冻结 DINOv2-G，对少量正常图像提取 patch token。
+Stage 2：对正常 patch 特征拟合 PCA，得到均值 mu 与正常子空间基 C。
+Inference：测试图像走同一个 backbone，patch 特征投影到正常子空间。
+Output：patch 残差形成异常热图；top 1% patch 分数聚合成图像级异常分数。
+
+## 5. [content] 特征抽取细节：为什么用中间层和增强
+Backbone：DINOv2-G / ViT-G/14，输入分辨率 672 x 672。
+层选择：聚合 DINOv2-G 的第 22-28 层，而不是只用最后一层。
+原因：中间层兼顾局部结构与语义信息；最后层更偏类别语义，可能丢掉细粒度缺陷。
+增强：每张正常图生成 Na = 30 个旋转增强视图，用于更稳地估计协方差。
+
+## 6. [content] PCA 正常子空间：论文的核心建模
+正常特征集合：X_normal 包含 k 张正常图及增强样本的所有 patch 特征。
+估计参数：均值 mu 与协方差 Sigma。
+PCA 基：取 Sigma 的前 r 个特征向量，组成 C in R^{D x r}。
+生成式理解：x = mu + C z + epsilon，正常变化应主要落在 mu + C z 张成的低维线性空间附近。
+解释方差：sum(lambda_i, i<=r) >= tau * sum(lambda_i)，论文取 tau = 0.99。
+
+## 7. [content] 异常评分：投影残差、图像级聚合、像素级定位
+Patch 投影：x_proj = mu + C C^T (x_p - mu)。
+Patch 分数：S(x_p) = ||x_p - x_proj||_2^2。
+图像级分数：取异常图中最高 rho = 1% patch 分数的均值，即 TVaR。
+像素级定位：patch 分数上采样到原图尺寸，并用 sigma = 4 的 Gaussian smoothing 抑制噪声。
+解释：如果异常特征不属于正常主变化方向，投影后会在正交残差方向留下能量。
+
+## 8. [data] 主实验：少样本设置下达到强基线
+Datasets：MVTec-AD 15 类工业异常；VisA 高分辨率复杂异常。
+Metrics：I-AUROC / I-AUPR；P-AUROC / PRO。
+MVTec-AD 1-shot：I-AUROC 97.1%，P-AUROC 97.5%。
+VisA 1-shot：I-AUROC 93.4%，P-AUROC 98.2%。
+相较 AnomalyDINO：VisA 1-shot I-AUROC 提升约 6.0 个百分点，PRO 提升约 1.0 个百分点。
+
+## 9. [content] 定性结果：残差热图可以定位缺陷
+SubspaceAD 不只输出图像级异常分数，也能形成空间异常热图。
+在 VisA 的 candle / capsules / cashew，以及 MVTec-AD 的 bottle / hazelnut / screw 示例中，热图更贴近 GT 区域。
+对业务的启发：即使最终只需“划痕 / 正常”二分类，也应该保留热图，用于人工复核和阈值调试。
+
+## 10. [data] 消融结论：哪些因素真正关键
+输入分辨率：VisA 从 256 到 448 / 672 明显提升；MVTec-AD 在 448 以上趋稳。
+Backbone 规模：DINOv2-G 最强，小模型可做部署折中。
+层聚合：中间 7 层 concat / mean 的效果优于只用最后层。
+PCA 阈值：tau in [0.95, 0.99] 稳定；tau = 1.00 会显著下降。
+关键理解：子空间要保留正常主变化，但必须留下残差空间，异常才有信号。
+
+## 11. [content] 论文方法如何迁移到业务任务
+可直接借鉴：特征抽取、子空间建模、投影残差、top-k / TVaR 聚合、热图可视化。
+需要改造：论文用少量正常新类样本建“正常子空间”；业务背景更强调旧型号缺陷库到新型号零样本的“共享缺陷子空间”。
+建议同时做两个 baseline：Normal-PCA residual 与 Defect-prototype projection。
+前者验证新型号正常外观是否能被建模；后者验证旧型号划痕特征是否能投影迁移。
+
+## 12. [content] 实验设计：先回答三个可证伪问题
+实验 1：正常子空间是否成立？每个新型号只取少量正常图，拟合 Normal-PCA，测试划痕残差是否稳定高于正常区域。
+实验 2：旧型号缺陷原型能否迁移？用旧型号划痕 patch 构建 defect prototype / defect PCA，新型号图像投影后看最近邻距离和热图位置。
+实验 3：域对齐是否真的带来收益？在旧型号有标签 + 新型号无标签条件下，加入 pull / push 投影目标，与不对齐 baseline 对比。
+评估指标：I-AUROC、P-AUROC、PRO、误检率、漏检率、阈值稳定性、人工复核成本。
+必要可视化：投影前后点云、top patch 位置、异常热图、阈值曲线、跨型号分组结果。
+
+## 13. [content] 风险、限制与下一步问题
+风险 1：DINOv2-G 成本高，实际部署可能需要 DINOv2-S/B 或蒸馏特征。
+风险 2：PCA 是线性子空间，强反光、污染、复杂纹理可能需要 robust PCA / kernel PCA / metric learning。
+风险 3：如果新型号完全无正常样本，Normal-PCA baseline 不成立，需要转向旧库缺陷子空间或 batched zero-shot。
+问题 1：业务是否允许每个新型号采少量正常图作为启动样本？
+问题 2：划痕标注应做到 image-level、patch-level，还是只需要少量人工确认点？
+问题 3：第一阶段优先追求可解释 baseline，还是直接做 UDA 共享投影矩阵？
