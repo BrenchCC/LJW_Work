@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-themes="corporate-clean,academic-paper,minimal-white,swiss-grid,engineering-whiteprint">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ADDA 论文汇报：对抗判别式域适应</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" id="theme-link" href="assets/themes/corporate-clean.css">
+<link rel="stylesheet" href="assets/animations/animations.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-adda-report">
+<div class="deck">
+
+  <!-- Slide 1: Cover -->
+  <section class="slide cover-slide" data-title="Cover">
+    <div class="slide-grid hero-grid">
+      <div class="hero-copy">
+        <p class="kicker">mentor paper report · 2026-04-28</p>
+        <h1 class="h1" data-anim="fade-up">ADDA：<br>对抗判别式域适应</h1>
+        <p class="lede">源域有标签、目标域无标签时，用对抗学习对齐特征空间，让分类器跨域迁移。</p>
+        <div class="meta-strip">
+          <span>无监督域适应</span>
+          <span>对抗学习</span>
+          <span>特征子空间对齐</span>
+        </div>
+      </div>
+      <figure class="media-panel hero-media">
+        <img src="../1702-05464v1/images/header.png" alt="ADDA paper title and authors">
+      </figure>
+    </div>
+    <div class="deck-footer">
+      <span>ADDA · Tzeng et al. · arXiv:1702.05464</span>
+      <span class="slide-number" data-current="1" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>今天分享的这篇论文是 ADDA，全称 Adversarial Discriminative Domain Adaptation。它解决的核心问题是：当你有源域标签、目标域没有标签时，怎么让模型在目标域上也能分类。</p>
+      <p>选这篇论文的原因跟我们正在做的工业缺陷检测直接相关。我们有五款电池的划痕标签，但第六款没有，直接迁移泛化性差。这个问题本质就是特征子空间的问题——产品外观域差异压过了缺陷语义。</p>
+      <p>ADDA 提供了一个清晰的对齐思路：用对抗训练把目标域特征拉到源域特征空间里，让源域分类器可以直接用。我会重点讲清楚它怎么做的、为什么有效、以及对我们项目的适用边界。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 2: Outline -->
+  <section class="slide" data-title="Outline">
+    <p class="kicker">overview</p>
+    <h2 class="h2">今天聊什么</h2>
+    <div class="roadmap" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="step">
+        <span>1</span>
+        <strong>问题与动机</strong>
+        <p>域偏移为什么让模型失效；我们的缺陷检测痛点。</p>
+      </div>
+      <div class="step">
+        <span>2</span>
+        <strong>ADDA 方法</strong>
+        <p>三阶段训练流程、对抗对齐原理、权重不共享的设计。</p>
+      </div>
+      <div class="step">
+        <span>3</span>
+        <strong>实验证据</strong>
+        <p>数字数据集跨域结果、NYUD 跨模态迁移、对比分析。</p>
+      </div>
+      <div class="step">
+        <span>4</span>
+        <strong>应用讨论</strong>
+        <p>能否用到电池缺陷检测、局限与风险、组合方案建议。</p>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Problem → Method → Evidence → Application</span>
+      <span class="slide-number" data-current="2" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>今天分享分成四个部分。先讲清楚域偏移问题是什么、为什么跟我们的缺陷检测痛点相关；然后展开 ADDA 的方法和训练流程；接着看实验证据支撑了什么结论；最后讨论它能不能用到我们的场景、有什么局限。</p>
+      <p>核心结论先剧透：ADDA 适合做我们技术路线里的域适应基线，但不能单独解决"第六款没有划痕样本"的根本风险。后面我会逐步展开为什么。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 3: Our Problem -->
+  <section class="slide" data-title="Our Problem">
+    <p class="kicker">01 · the problem we face</p>
+    <h2 class="h2">我们的痛点：跨产品缺陷泛化差</h2>
+    <div class="pipeline">
+      <div class="pipe-node">
+        <span class="node-label">前五款电池</span>
+        <strong>有缺陷样本与标签</strong>
+        <p>划痕、正常、其他缺陷类别提供监督信号。分类器在五款上表现很好。</p>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node emphasis">
+        <span class="node-label">直接迁移</span>
+        <strong>泛化性明显下降</strong>
+        <p>第六款电池的材质、光照、纹理变了，特征空间偏移，分类器失准。</p>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node warn">
+        <span class="node-label">第六款电池</span>
+        <strong>没有划痕标签</strong>
+        <p>暂时无法重新标注，需要无监督或半监督方法弥合域差距。</p>
+      </div>
+    </div>
+    <div class="insight-band">
+      <strong>本质问题</strong>
+      <span>产品外观域特征子空间压过了缺陷语义子空间；分类器学到的是"哪款产品"，而不是"有什么缺陷"。</span>
+    </div>
+    <div class="deck-footer">
+      <span>Domain shift: product appearance dominates defect semantics</span>
+      <span class="slide-number" data-current="3" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>先把我们的问题说清楚。前五款电池有划痕标签，分类器训练出来效果不错。但第六款电池上线后，直接用前五款训练的模型，泛化性很差。原因是第六款的材质、光照、纹理变了，图像域发生了偏移。</p>
+      <p>这里的关键洞察是：分类器学到的其实不只是"划痕 vs 正常"，还学到了大量"这款电池长什么样"的信息。当产品外观变了，这些外观特征就变成了干扰。</p>
+      <p>所以本质上，我们要解决的是产品外观子空间和缺陷语义子空间的纠缠问题。ADDA 这类域适应方法，就是试图把两个域的特征分布拉近，让分类器不再被外观域差异干扰。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 4: What is Domain Shift -->
+  <section class="slide" data-title="Domain Shift">
+    <p class="kicker">02 · domain shift</p>
+    <h2 class="h2">什么是域偏移：同样的划痕，不同的"长相"</h2>
+    <div class="domain-shift-visual">
+      <div class="domain-box">
+        <h4>源域：前五款电池</h4>
+        <p>相同缺陷在不同产品上成像差异大</p>
+        <p>光照、材质、纹理、相机参数不同</p>
+        <p>特征空间按产品聚类</p>
+      </div>
+      <div class="shift-arrow">
+        <span class="arrow-label">domain shift</span>
+        <span class="arrow-line">→</span>
+        <span class="arrow-label">特征偏移</span>
+      </div>
+      <div class="domain-box">
+        <h4>目标域：第六款电池</h4>
+        <p>划痕物理形态类似</p>
+        <p>但图像特征分布与前五款差异大</p>
+        <p>源域分类器无法覆盖</p>
+      </div>
+    </div>
+    <div class="feature-space">
+      <div class="fs-cluster source"></div>
+      <span class="fs-label src-label">源域特征</span>
+      <div class="fs-cluster target-before"></div>
+      <span class="fs-label tgt-label">目标域特征</span>
+    </div>
+    <div class="caption-block">
+      <strong>特征空间视角</strong>
+      <p>理想状态下，同类缺陷应聚在一起；但域偏移让特征按产品线分离，缺陷语义被淹没。</p>
+    </div>
+    <div class="deck-footer">
+      <span>Same defect → different feature distribution → classifier fails</span>
+      <span class="slide-number" data-current="4" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页用图示把域偏移讲清楚。左边的源域是前五款电池，右边是第六款。划痕的物理本质是一样的——都是表面线性损伤，但在不同产品上的成像完全不同。材质反光不同、光照条件不同、相机位置不同，导致同一个缺陷在特征空间里落到了不同的位置。</p>
+      <p>下面的特征空间示意图说明了核心问题：源域特征和目标域特征形成了两个分离的簇。如果特征按产品线聚在一起，而不是按缺陷类型聚在一起，那分类器区分的其实是"哪款产品"而不是"有没有缺陷"。</p>
+      <p>所以域适应要做的事情就是：把目标域特征簇拉到源域特征簇附近，让"划痕"和"正常"的判别边界在目标域上也能生效。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 5: Paper Context -->
+  <section class="slide" data-title="Paper Context">
+    <p class="kicker">03 · why this paper</p>
+    <h2 class="h2">ADDA 要解决什么</h2>
+    <div class="slide-grid two-col">
+      <div class="stack">
+        <div class="point-row">
+          <span class="point-index">A</span>
+          <div>
+            <h3>无监督域适应的经典设定</h3>
+            <p>源域有标签 (X<sub>s</sub>, Y<sub>s</sub>)，目标域只有图像 X<sub>t</sub>，没有标签。希望模型在目标域上也能正确分类。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">B</span>
+          <div>
+            <h3>对抗学习对齐特征分布</h3>
+            <p>训练一个域判别器区分源/目标特征，再训练目标编码器欺骗判别器，从而拉近两个域的特征分布。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">C</span>
+          <div>
+            <h3>判别式而非生成式</h3>
+            <p>不生成目标域图像，只对齐特征空间。更轻量、更稳定，尤其适合分类任务。</p>
+          </div>
+        </div>
+      </div>
+      <figure class="media-panel">
+        <img src="../1702-05464v1/images/header.png" alt="ADDA paper title">
+        <figcaption>Tzeng, Hoffman, Saenko, Darrell — UC Berkeley / Stanford / BU</figcaption>
+      </figure>
+    </div>
+    <div class="deck-footer">
+      <span>Unsupervised DA · adversarial feature alignment · discriminative modeling</span>
+      <span class="slide-number" data-current="5" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>ADDA 的设定非常清晰：源域有标签数据，目标域只有无标签图像。这是一个非常典型的工业场景——我们有五款电池的划痕标签，第六款只有产线上的图像。</p>
+      <p>它的核心思路是用对抗学习做特征对齐。具体来说，训练一个域判别器来区分"这是源域特征还是目标域特征"，同时训练目标域编码器去欺骗这个判别器。如果判别器分不清了，说明两个域的特征分布已经足够接近。</p>
+      <p>ADDA 选择判别式方法而不是生成式方法，这是一个重要设计选择。它不尝试生成目标域图像，只做特征空间的对齐。这样计算量小，也不容易因为生成质量不好而引入额外噪声。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 6: Unified Framework -->
+  <section class="slide" data-title="Unified Framework">
+    <p class="kicker">04 · framework overview</p>
+    <h2 class="h2">统一对抗域适应框架</h2>
+    <div class="text-two-col">
+      <div class="text-col">
+        <h3>四类设计选择</h3>
+        <p><strong>1. 基础模型</strong>：预训练网络初始化，还是从头训练？</p>
+        <p><strong>2. 权重共享</strong>：源/目标编码器共享全部、部分、还是不共享权重？</p>
+        <p><strong>3. 对抗损失</strong>：用什么方式做对抗——梯度反转、域混淆、还是 GAN loss？</p>
+        <p><strong>4. 判别 vs 生成</strong>：只对齐特征，还是同时生成目标域图像？</p>
+      </div>
+      <div class="text-col">
+        <h3>ADDA 的选择</h3>
+        <p><strong>预训练初始化</strong>：用 ImageNet 预训练权重作为起点。</p>
+        <p><strong>不共享权重</strong>：源编码器固定，目标编码器独立学习。允许目标域有自己的低层纹理映射。</p>
+        <p><strong>GAN loss</strong>：目标编码器通过欺骗域判别器来学习对齐。</p>
+        <p><strong>判别式</strong>：不生成图像，只做特征对齐，更适合分类任务。</p>
+      </div>
+    </div>
+    <div class="insight-band">
+      <strong>关键设计</strong>
+      <span>权重不共享 + GAN loss：目标编码器可以自由适应目标域的低层纹理，同时被约束在对齐的特征空间里。</span>
+    </div>
+    <div class="deck-footer">
+      <span>Base model · weight sharing · adversarial loss · discriminative vs generative</span>
+      <span class="slide-number" data-current="6" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>ADDA 的一个贡献是它把现有方法放在统一框架下比较。域适应方法在设计上有四个关键选择：基础模型怎么初始化、源和目标编码器是否共享权重、用什么对抗损失、是判别式还是生成式。</p>
+      <p>ADDA 的选择是不共享权重加 GAN loss。不共享权重这一点很重要——共享权重意味着源和目标用同一套底层特征提取器，但不同产品的纹理差异可能需要不同的底层映射。让目标编码器独立学习，可以更好地适应目标域特有的低层纹理。</p>
+      <p>但这也意味着目标编码器需要从预训练权重开始"学会"一套新的映射，同时被对抗损失约束到源域特征空间里。这是一个在灵活性和约束之间的平衡。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 7: Three-Stage Pipeline -->
+  <section class="slide" data-title="Three-Stage Pipeline">
+    <p class="kicker">05 · training pipeline</p>
+    <h2 class="h2">三阶段训练流程</h2>
+    <div class="stage-flow">
+      <div class="stage-card active">
+        <span class="stage-num">1</span>
+        <h3>源域预训练</h3>
+        <p>用源域标签训练源编码器 <code>M<sub>s</sub></code> 和分类器 <code>C</code>。</p>
+        <p>目标：最小化分类损失 <code>L<sub>cls</sub></code>，让分类器在源域上表现好。</p>
+        <p style="margin-top:12px; color: var(--accent); font-weight:600;">此阶段完成后，M<sub>s</sub> 和 C 的参数<strong>固定</strong>。</p>
+      </div>
+      <div class="stage-card">
+        <span class="stage-num">2</span>
+        <h3>对抗对齐</h3>
+        <p>固定 M<sub>s</sub>，训练域判别器 <code>D</code> 和目标编码器 <code>M<sub>t</sub></code>。</p>
+        <p>D 学习区分源/目标特征；M<sub>t</sub> 学习欺骗 D。</p>
+        <p style="margin-top:12px; color: var(--accent); font-weight:600;">对抗博弈让 M<sub>t</sub>(X<sub>t</sub>) ≈ M<sub>s</sub>(X<sub>s</sub>)。</p>
+      </div>
+      <div class="stage-card">
+        <span class="stage-num">3</span>
+        <h3>目标域推理</h3>
+        <p>测试时只用目标编码器 + 源分类器。</p>
+        <p>输入目标图像 → M<sub>t</sub> 提取特征 → C 输出分类。</p>
+        <p style="margin-top:12px; color: var(--accent); font-weight:600;">不需要判别器 D，也不需要目标域标签。</p>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Stage 1: source pretrain · Stage 2: adversarial alignment · Stage 3: target inference</span>
+      <span class="slide-number" data-current="7" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>ADDA 的训练流程非常清晰，分三个阶段。第一阶段是源域预训练，用前五款电池的划痕标签训练编码器和分类器。训练完后编码器和分类器参数都固定下来。</p>
+      <p>第二阶段是核心：固定源编码器，训练域判别器和目标编码器。判别器要区分"这是源域特征还是目标域特征"，目标编码器要尽量让目标域特征被判别器误认为源域特征。这就是对抗博弈。</p>
+      <p>第三阶段就是推理。输入第六款电池图像，用目标编码器提特征，直接送进源域分类器出结果。判别器只在训练时用，推理时不需要。整个流程不需要第六款的任何标签。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 8: Pipeline Figure -->
+  <section class="slide" data-title="Pipeline Figure">
+    <p class="kicker">06 · architecture diagram</p>
+    <h2 class="h2">ADDA 架构图</h2>
+    <div class="full-media">
+      <img src="../1702-05464v1/images/adda_pipeline_figure3.png" alt="ADDA three-stage pipeline architecture">
+    </div>
+    <div class="text-two-col" style="margin-top: 12px;">
+      <div class="text-col">
+        <h3>关键观察</h3>
+        <p>Source CNN 训练后固定（虚线），Target CNN 单独学习自己的低层映射。</p>
+        <p>域判别器 D 只在第二阶段参与，推理时不需要。</p>
+      </div>
+      <div class="text-col">
+        <h3>对应到电池场景</h3>
+        <p>Source CNN = 前五款电池特征提取器；Target CNN = 第六款电池特征提取器。</p>
+        <p>分类器 C 复用前五款的缺陷分类头，不需要重新训练。</p>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Figure 3 from the paper — source encoder (fixed) · target encoder (learned) · domain discriminator</span>
+      <span class="slide-number" data-current="8" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页是论文中的架构图。左边是源域：带标签的图像经过 Source CNN 提取特征，然后送给分类器。中间是目标域：无标签图像经过 Target CNN，特征要和源域特征混在一起骗过判别器。</p>
+      <p>注意虚线表示固定参数——Source CNN 在第一阶段训练完后就不变了。这是 ADDA 的一个设计选择：源编码器不动，让目标编码器来适应源域空间。</p>
+      <p>映射到我们的场景：前五款电池就是源域，第六款就是目标域。分类器 C 是前五款训练好的缺陷分类头，直接复用。关键问题在于：对抗对齐能否把第六款的特征拉到前五款的特征空间里？</p>
+    </aside>
+  </section>
+
+  <!-- Slide 9: Objective Function -->
+  <section class="slide" data-title="Objective Function">
+    <p class="kicker">07 · math</p>
+    <h2 class="h2">三个优化目标：分类 + 判别 + 欺骗</h2>
+    <div class="slide-grid image-left">
+      <figure class="media-panel">
+        <img src="../1702-05464v1/images/adda_objective_eq9.png" alt="ADDA objective function">
+      </figure>
+      <div class="formula-stack">
+        <div class="formula-card">
+          <span>① 分类损失</span>
+          <code>min L_cls(X_s, Y_s)</code>
+        </div>
+        <div class="formula-card">
+          <span>② 判别器损失</span>
+          <code>min L_advD = -E[log D(M_s(x_s))] - E[log(1-D(M_t(x_t)))]</code>
+        </div>
+        <div class="formula-card accent-card">
+          <span>③ 目标编码器损失</span>
+          <code>min L_advM = -E[log D(M_t(x_t))]</code>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Classification → Discrimination → Fooling — standard GAN formulation for feature alignment</span>
+      <span class="slide-number" data-current="9" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页是 ADDA 的三个优化目标。第一个是分类损失，用源域标签训练源编码器和分类器，让它在前五款电池上学会区分划痕和正常。</p>
+      <p>第二个是判别器损失，标准 GAN 判别器目标——让它正确区分源域特征和目标域特征。</p>
+      <p>第三个是目标编码器损失，这是对抗的部分——让目标编码器生成的特征被判别器误认为是源域特征。如果判别器分不出来了，说明两个域的特征分布已经足够接近。</p>
+      <p>第三个目标是整个方法的核心。它不要求目标域有标签，只要求目标域有无标签图像。这正是我们的场景：第六款电池虽然没有划痕标签，但有产线图像可以用。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 10: Why It Works -->
+  <section class="slide" data-title="Why It Works">
+    <p class="kicker">08 · intuition</p>
+    <h2 class="h2">为什么对抗对齐有效</h2>
+    <div class="feature-space">
+      <div class="fs-cluster source"></div>
+      <span class="fs-label src-label">源域特征</span>
+      <div class="fs-cluster target-after"></div>
+      <span class="fs-label tgt-after-label">目标域特征（对齐后）</span>
+      <span class="fs-arrow">←</span>
+    </div>
+    <div class="versus-grid">
+      <div class="versus-col">
+        <h3>对齐前</h3>
+        <p>源域和目标域特征分布差异大</p>
+        <p>源域分类边界在目标域上失效</p>
+        <p>模型预测塌缩：全部预测为多数类</p>
+      </div>
+      <div class="versus-col">
+        <h3>对齐后</h3>
+        <p>目标域特征被拉到源域特征空间</p>
+        <p>源域分类边界可以继续使用</p>
+        <p>预测分布更分散，更接近有监督结果</p>
+      </div>
+    </div>
+    <div class="insight-band">
+      <strong>核心逻辑</strong>
+      <span>如果 M_t(X_t) ≈ M_s(X_s)，那么源域学到的分类器 C 就能直接用到目标域特征上。</span>
+    </div>
+    <div class="deck-footer">
+      <span>Feature alignment → shared classifier → cross-domain prediction</span>
+      <span class="slide-number" data-current="10" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页解释为什么对抗对齐能工作。左边的图展示了特征空间的变化：对齐前，源域和目标域特征是分离的；对齐后，目标域特征被"拉"到了源域特征空间里。</p>
+      <p>对齐前，源域分类器学到的判别边界在目标域特征上是失效的——因为目标域特征落在边界之外。一个常见症状就是预测塌缩：模型把所有目标域样本都预测为同一个类。</p>
+      <p>对齐后，目标域特征落在了源域特征空间里，源域分类器的判别边界就可以继续使用了。这就是 ADDA 的核心逻辑：不重新训练分类器，而是让目标域特征去"适应"已有的分类器。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 11: Weight Sharing Choice -->
+  <section class="slide" data-title="Weight Sharing">
+    <p class="kicker">09 · design choice</p>
+    <h2 class="h2">为什么不共享权重</h2>
+    <div class="versus-grid">
+      <div class="versus-col warn-col">
+        <h3>共享权重的局限</h3>
+        <p>源和目标用同一套底层特征提取器</p>
+        <p>底层特征被"绑死"，无法适应目标域特有纹理</p>
+        <p>当域偏移较大时，共享底层可能反而限制对齐</p>
+        <p>代表方法：DANN (梯度反转)、Domain Confusion</p>
+      </div>
+      <div class="versus-col">
+        <h3>不共享权重的优势</h3>
+        <p>目标编码器可以学习目标域特有的低层映射</p>
+        <p>源编码器固定，保留源域判别性特征</p>
+        <p>对抗约束只作用于高层特征空间</p>
+        <p>在 SVHN → MNIST (大域偏移) 上明显更稳定</p>
+      </div>
+    </div>
+    <div class="caption-block">
+      <strong>电池缺陷场景的意义</strong>
+      <p>不同电池型号的表面纹理差异可能很大——光泽度、颗粒感、反光模式都不同。让目标编码器独立学习底层映射，可以更好地捕捉第六款电池特有的纹理特征。</p>
+    </div>
+    <div class="deck-footer">
+      <span>Shared weights: simpler but rigid · Separate weights: flexible but needs careful init</span>
+      <span class="slide-number" data-current="11" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>ADDA 选择不共享权重，这个设计需要特别解释一下。共享权重的方法比如 DANN，让源和目标用同一个编码器，通过梯度反转层来对齐特征。好处是简单，但问题是底层特征被绑死了，两个域必须共用同一套底层映射。</p>
+      <p>当域偏移不大的时候，共享权重没问题。但当域偏移较大——比如 SVHN 迁移到 MNIST，或者前五款电池迁移到第六款——底层纹理差异可能大到共享权重反而限制了对齐效果。</p>
+      <p>ADDA 让目标编码器独立学习，对抗约束只作用在高层特征空间。这意味着目标编码器可以自由地学习第六款电池特有的底层纹理映射，同时保证高层特征和源域对齐。这是一个更灵活的设计。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 12: Prerequisite Check -->
+  <section class="slide" data-title="Prerequisite">
+    <p class="kicker">10 · prerequisite</p>
+    <h2 class="h2">ADDA 的前提条件：不是万能的</h2>
+    <div class="stage-flow">
+      <div class="stage-card active">
+        <span class="stage-num">✓</span>
+        <h3>前提 1：目标域有无标签图像</h3>
+        <p>ADDA 必须有目标域图像 X<sub>t</sub> 来训练目标编码器和判别器。</p>
+        <p>如果第六款电池<strong>连无标签图像都没有</strong>，ADDA 无法启动。</p>
+      </div>
+      <div class="stage-card">
+        <span class="stage-num">?</span>
+        <h3>前提 2：目标域图像包含缺陷样本</h3>
+        <p>ADDA 对齐的是<strong>边缘分布</strong> P(X)，不是条件分布 P(Y|X)。</p>
+        <p>如果目标域只有正常样本，划痕子空间可能无法被正确对齐。</p>
+      </div>
+      <div class="stage-card">
+        <span class="stage-num">!</span>
+        <h3>前提 3：源/目标类别空间一致</h3>
+        <p>ADDA 假设源域和目标域共享相同的类别标签集合。</p>
+        <p>如果第六款出现了前五款没有的缺陷类型，ADDA 无法处理。</p>
+      </div>
+    </div>
+    <div class="risk-band">
+      <strong>风险提醒</strong>
+      <span>如果第六款只有正常样本，ADDA 可能只对齐正常表面纹理，无法保证划痕子空间被正确迁移。</span>
+    </div>
+    <div class="deck-footer">
+      <span>ADDA aligns marginal P(X), not conditional P(Y|X) — this is the key limitation</span>
+      <span class="slide-number" data-current="12" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页很重要，讲 ADDA 的前提条件。很多论文汇报只讲方法多好，不讲什么时候不能用。对我们的场景来说，这个前提检查非常关键。</p>
+      <p>第一个前提：目标域必须有无标签图像。如果第六款电池连产线图像都没有，ADDA 根本没法启动。不过在我们的场景里，这个条件是满足的——第六款电池有产线正常品图像。</p>
+      <p>第二个前提是核心风险：ADDA 对齐的是边缘分布，也就是 P(X)，而不是条件分布 P(Y|X)。它保证的是"两个域的特征分布整体接近"，但不保证每个类别分别被正确对齐。如果第六款的无标签样本里主要是正常品，对抗对齐主要学到的就是正常表面纹理的对齐，划痕子空间可能被忽略。</p>
+      <p>第三个前提是类别空间一致。如果第六款出现了全新的缺陷类型，ADDA 也处理不了。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 13: Digits Results -->
+  <section class="slide" data-title="Digits Results">
+    <p class="kicker">11 · evidence</p>
+    <h2 class="h2">实验 1：数字数据集跨域迁移</h2>
+    <div class="slide-grid results-grid">
+      <div class="metric-panel">
+        <div class="metric">
+          <span class="value">90.1%</span>
+          <span class="label">USPS → MNIST (ADDA)</span>
+        </div>
+        <div class="metric">
+          <span class="value">89.1%</span>
+          <span class="label">USPS → MNIST (CoGAN)</span>
+        </div>
+        <div class="metric">
+          <span class="value">76.0%</span>
+          <span class="label">SVHN → MNIST (ADDA)</span>
+        </div>
+        <div class="metric">
+          <span class="value">—</span>
+          <span class="label">SVHN → MNIST (CoGAN 未收敛)</span>
+        </div>
+      </div>
+      <figure class="media-panel">
+        <img src="../1702-05464v1/images/digits_results_table2.png" alt="Digits domain adaptation results table">
+      </figure>
+    </div>
+    <div class="insight-band">
+      <strong>关键结论</strong>
+      <span>域偏移越大（SVHN → MNIST），判别式方法越稳定；生成式方法 (CoGAN) 在大偏移下可能不收敛。</span>
+    </div>
+    <div class="deck-footer">
+      <span>MNIST · USPS · SVHN — discriminative > generative under large domain shift</span>
+      <span class="slide-number" data-current="13" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>第一个实验是数字数据集上的跨域迁移。USPS 到 MNIST 的域偏移比较小，ADDA 达到 90.1%，比 CoGAN 的 89.1% 略好。但更关键的对比是 SVHN 到 MNIST——这里域偏移很大，SVHN 是真实场景的街景数字，MNIST 是手写数字。</p>
+      <p>在这个大偏移场景下，ADDA 达到 76.0%，而 CoGAN 直接没有收敛。这说明生成式方法在大域偏移下可能不稳定，而判别式方法更鲁棒。</p>
+      <p>映射到电池场景：前五款到第六款的域偏移可能更接近 SVHN 到 MNIST 的情况——不同产品的外观差异可能相当大。所以 ADDA 的判别式设计在稳定性上有优势。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 14: NYUD Results -->
+  <section class="slide" data-title="NYUD Results">
+    <p class="kicker">12 · cross-modal evidence</p>
+    <h2 class="h2">实验 2：跨模态目标分类</h2>
+    <div class="slide-grid two-col">
+      <div class="stack">
+        <div class="point-row">
+          <span class="point-index">A</span>
+          <div>
+            <h3>从 RGB 到深度图：域偏移极大</h3>
+            <p>RGB 图像和深度/HHA 图的成像原理完全不同，是最接近工业跨域的场景。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">B</span>
+          <div>
+            <h3>Source only: 13.9% → ADDA: 21.1%</h3>
+            <p>整体准确率提升显著。无目标标签时，对抗对齐带来了 7 个百分点以上的提升。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">C</span>
+          <div>
+            <h3>并非所有类别都提升</h3>
+            <p>某些类别在适应后仍然无法恢复——这对缺陷检测是重要警示。</p>
+          </div>
+        </div>
+      </div>
+      <figure class="media-panel">
+        <img src="../1702-05464v1/images/nyud_results_table3.png" alt="NYUD cross-modal classification results">
+      </figure>
+    </div>
+    <div class="deck-footer">
+      <span>RGB → Depth/HHA · closest to industrial cross-domain scenarios</span>
+      <span class="slide-number" data-current="14" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>第二个实验是 NYUD 数据集上的跨模态分类，从 RGB 图像迁移到深度图。这是论文中最接近工业跨域的证据——RGB 和深度图的成像原理完全不同，就像不同电池型号的表面纹理差异。</p>
+      <p>Source only 只有 13.9% 的整体准确率，ADDA 提升到 21.1%，提升了 7 个百分点以上。在完全没有目标域标签的情况下，这是很有意义的提升。</p>
+      <p>但需要注意论文的诚实之处：并非所有类别都提升。某些类别在域适应后仍然无法恢复。这一点对电池划痕检测尤其重要——如果某些缺陷类型在目标产品中没有覆盖，域适应不一定能凭空恢复。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 15: Confusion Matrix -->
+  <section class="slide" data-title="Confusion Matrix">
+    <p class="kicker">13 · qualitative evidence</p>
+    <h2 class="h2">预测塌缩 vs 对齐后恢复</h2>
+    <div class="full-media">
+      <img src="../1702-05464v1/images/confusion_figure5.png" alt="NYUD confusion matrices comparing source only and ADDA">
+    </div>
+    <div class="versus-grid" style="margin-top: 12px;">
+      <div class="versus-col warn-col">
+        <h3>Source only 的症状</h3>
+        <p>目标域预测严重塌缩</p>
+        <p>大部分样本被预测为同一个多数类</p>
+        <p>混淆矩阵呈现"一列高、其余低"</p>
+      </div>
+      <div class="versus-col">
+        <h3>ADDA 对齐后</h3>
+        <p>预测分布更分散、更均匀</p>
+        <p>更接近有目标域监督训练的结果</p>
+        <p>但仍有部分类别恢复不完全</p>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Figure 5 — prediction collapse → partial recovery after adversarial alignment</span>
+      <span class="slide-number" data-current="15" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页的混淆矩阵对比很直观。Source only 模型在目标域上的预测严重塌缩——大部分样本被预测为同一个类，混淆矩阵呈现"一列特别高、其余几乎为零"的模式。这说明分类器在目标域上基本失效了。</p>
+      <p>ADDA 对齐后，预测分布变得更分散、更均匀，更接近有目标域标签训练的结果。这说明对抗对齐确实帮助分类器在目标域上恢复了部分判别能力。</p>
+      <p>但要注意：恢复不完全。某些类别的对角线元素仍然偏低，说明这些类别在域适应后仍然没有被正确覆盖。这再次印证了 ADDA 对齐边缘分布的局限性——它不能保证每个类别都被正确对齐。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 16: Application to Our Task -->
+  <section class="slide" data-title="Application Analysis">
+    <p class="kicker">14 · application</p>
+    <h2 class="h2">能否用到电池缺陷检测？</h2>
+    <div class="slide-grid two-col">
+      <div class="stack">
+        <div class="point-row">
+          <span class="point-index">✓</span>
+          <div>
+            <h3>可以用作域适应基线</h3>
+            <p>前五款作源域、第六款正常图像作目标域，ADDA 可以削弱产品外观域偏移。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">✓</span>
+          <div>
+            <h3>不需要第六款标签</h3>
+            <p>只需要第六款的无标签图像就能启动对抗对齐。产线正常品图像即可。</p>
+          </div>
+        </div>
+        <div class="point-row">
+          <span class="point-index">!</span>
+          <div>
+            <h3>不能单独解决划痕迁移</h3>
+            <p>ADDA 对齐边缘分布，不保证划痕子空间被正确对齐。如果第六款无标签数据中没有划痕，对抗对齐看不到目标域划痕的真实形态。</p>
+          </div>
+        </div>
+      </div>
+      <div class="formula-stack">
+        <div class="formula-card accent-card">
+          <span>ADDA 做到的</span>
+          <code>M_s(X_s) ≈ M_t(X_t)</code>
+          <p style="margin:8px 0 0; color: var(--text-2); font-size:14px;">边缘特征分布对齐</p>
+        </div>
+        <div class="formula-card warn-card">
+          <span>ADDA 做不到的</span>
+          <code>P_s(Y|M_s(X_s)) ≈ P_t(Y|M_t(X_t))</code>
+          <p style="margin:8px 0 0; color: var(--bad); font-size:14px;">类别条件分布对齐</p>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span>Good baseline for product-domain shift · insufficient for defect subspace alignment</span>
+      <span class="slide-number" data-current="16" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>这页是核心结论页。ADDA 能用到我们的电池缺陷检测吗？答案是：可以用作域适应基线，但不能单独解决所有问题。</p>
+      <p>具体来说，如果我们把前五款电池作为源域，第六款的无标签产线图像作为目标域，ADDA 可以削弱产品外观域偏移。而且它不需要第六款的标签，只需要产线正常品图像就能启动。</p>
+      <p>但核心风险在于：ADDA 对齐的是边缘特征分布，不是类别条件分布。右边的公式对比说明了这一点。上面的公式是 ADDA 做到的——整体特征分布接近；下面的公式是 ADDA 做不到的——每个类别分别被正确对齐。</p>
+      <p>如果第六款的无标签数据里没有划痕样本，对抗对齐主要学到的就是正常表面纹理的对齐。此时，前五款学到的划痕子空间可能无法自然覆盖第六款划痕。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 17: Combined Solution -->
+  <section class="slide" data-title="Combined Solution">
+    <p class="kicker">15 · proposed solution</p>
+    <h2 class="h2">更稳妥的组合方案</h2>
+    <div class="roadmap">
+      <div class="step">
+        <span>1</span>
+        <strong>多源缺陷库</strong>
+        <p>五款电池作为多源域，提供更丰富的缺陷特征覆盖。</p>
+      </div>
+      <div class="step">
+        <span>2</span>
+        <strong>ADDA 域适应</strong>
+        <p>用对抗对齐削弱产品外观域偏移，作为域适应基线。</p>
+      </div>
+      <div class="step">
+        <span>3</span>
+        <strong>类条件约束</strong>
+        <p>加入原型约束或 MMD/CORAL，保证划痕子空间也正确对齐。</p>
+      </div>
+      <div class="step">
+        <span>4</span>
+        <strong>少量主动标注</strong>
+        <p>对第六款少量高不确定性样本做人工标注，弥补条件分布对齐不足。</p>
+      </div>
+      <div class="step">
+        <span>5</span>
+        <strong>异常检测兜底</strong>
+        <p>用正常样本 PCA 残差或 Mahalanobis 距离做异常检测，覆盖未知的缺陷类型。</p>
+      </div>
+    </div>
+    <div class="insight-band">
+      <strong>核心策略</strong>
+      <span>ADDA 做域适应基础层，类条件约束保缺陷子空间，少量标注补条件分布，异常检测兜底未知类。</span>
+    </div>
+    <div class="deck-footer">
+      <span>Multi-source + ADDA + conditional constraint + active labeling + anomaly detection</span>
+      <span class="slide-number" data-current="17" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>既然 ADDA 不能单独解决问题，那应该怎么组合？我建议一个五步方案。</p>
+      <p>第一步，把五款电池作为多源域。不是只用一款作源域，而是全部用上，提供更丰富的缺陷特征覆盖。不同电池的划痕形态可能有差异，多源域可以覆盖更多变化。</p>
+      <p>第二步，用 ADDA 做域适应基线。这是最直接的——用对抗对齐削弱产品外观域偏移。</p>
+      <p>第三步是关键改进——加入类条件约束。ADDA 只对齐边缘分布，我们需要额外约束来保证划痕子空间也被正确对齐。方法可以是原型约束、MMD、CORAL 等。</p>
+      <p>第四步，少量主动标注。选择第六款中模型最不确定的少量样本做人工标注，弥补条件分布对齐的不足。这比全量标注成本低很多。</p>
+      <p>第五步，异常检测兜底。用正常样本建模做异常检测，覆盖可能出现的未知缺陷类型。</p>
+    </aside>
+  </section>
+
+  <!-- Slide 18: Summary -->
+  <section class="slide" data-title="Summary">
+    <p class="kicker">16 · summary</p>
+    <h2 class="h2">总结：ADDA 的定位与边界</h2>
+    <div class="versus-grid">
+      <div class="versus-col">
+        <h3>ADDA 做对了什么</h3>
+        <p>清晰的无监督域适应框架：源域预训练 → 对抗对齐 → 目标推理</p>
+        <p>判别式方法比生成式更稳定，尤其是大域偏移下</p>
+        <p>不共享权重设计允许目标域有独立低层映射</p>
+        <p>作为域适应基线，方法简洁、实验充分</p>
+      </div>
+      <div class="versus-col warn-col">
+        <h3>ADDA 的局限</h3>
+        <p>只对齐边缘分布，不保证类别条件对齐</p>
+        <p>目标域无标签数据中必须有缺陷样本覆盖</p>
+        <p>不能处理开放集或新类别场景</p>
+        <p>不适合单独作为工业缺陷迁移的最终方案</p>
+      </div>
+    </div>
+    <div class="decision-box">
+      <strong>结论</strong>
+      <span>ADDA 适合做域适应基线——削弱产品外观偏移；但划痕子空间对齐需要额外约束（类条件 + 少量标注 + 异常检测）。</span>
+    </div>
+    <div class="deck-footer">
+      <span>Good baseline · not the final answer · combine with conditional alignment + active labeling + anomaly detection</span>
+      <span class="slide-number" data-current="18" data-total="18"></span>
+    </div>
+    <aside class="notes">
+      <p>最后做一个总结。ADDA 做对了几件事：提供了清晰的三阶段框架、判别式方法比生成式更稳定、不共享权重设计更灵活、作为基线方法简洁有效。</p>
+      <p>但它也有明确的局限：只对齐边缘分布不保证类别条件对齐、需要目标域有缺陷样本覆盖、不能处理新类别。</p>
+      <p>所以我的结论是：ADDA 适合做我们技术路线中的域适应基线，用来削弱产品外观偏移。但划痕子空间的对齐需要额外手段——类条件约束、少量主动标注、异常检测兜底。这个组合方案才是更稳健的工业级解法。</p>
+      <p>如果大家有问题，我们可以讨论 ADDA 和 DANN 的选择、类条件约束的具体实现、或者主动标注的策略设计。</p>
+    </aside>
+  </section>
+
+</div>
+
+<script src="assets/runtime.js"></script>
+</body>
+</html>
